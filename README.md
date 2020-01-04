@@ -16,6 +16,7 @@ Role Variables
 --------------
 
 Variables in `vars/main.yml`
+
 | name                    | default                                                 | description                        |
 |-------------------------|---------------------------------------------------------|------------------------------------|
 | domain_name             | my.example.com                                          | **Your domain**                    |
