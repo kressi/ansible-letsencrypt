@@ -1,0 +1,147 @@
+---
+# - name: python jmespath package is installed locally
+#   pip:
+#     name: jmespath
+#     extra_args: --user
+#   delegate_to: localhost
+#   become: false
+#   run_once: true
+
+- name: directories in /etc/letsencrypt exist
+  file:
+    path: "/etc/letsencrypt/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: u=rwx,g=x,o=x
+  with_items:
+  - accounts
+  - csr
+  - "{{ domain_name }}"
+
+- name: letsencrypt account key is present
+  openssl_privatekey:
+    path: "{{ letsencrypt_account_key }}"
+    size: 4096
+    type: RSA
+
+- name: letsencrypt private key is present
+  openssl_privatekey:
+    path: "{{ letsencrypt_privkey }}"
+    size: 4096
+    type: RSA
+
+- name: certificate signing request is present
+  openssl_csr:
+    path: "{{ letsencrypt_csr }}"
+    privatekey_path: "{{ letsencrypt_privkey }}"
+    country_name: "{{ cert.country }}"
+    email_address: "{{ cert.email_address }}"
+    common_name: "{{ cert.common_name }}"
+    subject_alt_name: "{{ cert.subject_alt_name }}"
+
+- name: acme challenge is registered
+  acme_certificate:
+    acme_directory: "{{ acme_directory }}"
+    acme_version: 2
+    account_key_src: "{{ letsencrypt_account_key }}"
+    account_email: "{{ acme_email }}"
+    terms_agreed: yes
+    challenge: http-01
+    csr: "{{ letsencrypt_csr }}"
+    dest: "{{ letsencrypt_cert }}"
+    fullchain_dest: "{{ letsencrypt_fullchain }}"
+    chain_dest: "{{ letsencrypt_chain }}"
+    remaining_days: 91 # default: 10
+  register: acme_challenge
+
+- debug:
+    var: acme_challenge
+
+- name: http_challenge is available
+  set_fact:
+    http_challenge: "{{ acme_challenge['challenge_data'][domain_name]['http-01'] }}"
+  when:
+    - acme_challenge is changed
+    # letsencrypt caches results of successful challenges for 30 days.
+    # during this time no new challenge will be returned.
+    - acme_challenge.challenge_data is defined
+    - acme_challenge.challenge_data | length > 0
+
+- name: http_challenge is expected but missing
+  fail:
+    msg: "{{ acme_challenge }}"
+  when:
+    - acme_challenge is changed
+    - http_challenge is not defined
+    - acme_challenge['authorizations'][domain_name] | json_query('challenges[?type == `http-01`].status') | first != 'valid'
+
+- name: ensure directory for http-01 challenge exists
+  file:
+    path: "{{ '/var/www/html/' + http_challenge.resource | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: u=rwx,g=rx,o=rx
+  when: http_challenge is defined
+
+- name: acme http-01 challenge is implemented
+  copy:
+    content: "{{ http_challenge.resource_value }}"
+    dest: "{{ '/var/www/html/' + http_challenge.resource }}"
+  when: http_challenge is defined
+
+- name: acme challenge is completed
+  acme_certificate:
+    acme_directory: "{{ acme_directory }}"
+    acme_version: 2
+    account_key_src: "{{ letsencrypt_account_key }}"
+    account_email: "{{ acme_email }}"
+    challenge: http-01
+    terms_agreed: yes
+    csr: "{{ letsencrypt_csr }}"
+    dest: "{{ letsencrypt_cert }}"
+    chain_dest: "{{ letsencrypt_chain }}"
+    fullchain_dest: "{{ letsencrypt_fullchain }}"
+    data: "{{ acme_challenge }}"
+  when: http_challenge is defined
+
+- name: challenge implementation is absent
+  file:
+    path: "{{ '/var/www/html/' + (http_challenge.resource | regex_replace('([^\\.]?)/(.+)$', '\\1')) }}"
+    state: absent
+  when: http_challenge is defined
+
+- name: file options-ssl-nginx.conf exists
+  copy:
+    src: files/options-ssl-nginx.conf
+    dest: "{{ nginx_options_ssl }}"
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+
+- name: Diffie-Hellman parameters exist
+  openssl_dhparam:
+    path: "{{ nginx_dhparams }}"
+    size: 1024 #default: 4096
+
+- name: my-site is available
+  template:
+    src: templates/my-site.j2
+    dest: /etc/nginx/sites-available/my-site
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+
+- name: my-site is enabled
+  file:
+    src: /etc/nginx/sites-available/my-site
+    dest: /etc/nginx/sites-enabled/my-site
+    state: link
+  notify: nginx is restarted
+
+- name: default site is absent
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: nginx is restarted
