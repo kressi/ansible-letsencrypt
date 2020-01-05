@@ -21,14 +21,14 @@ server {
 }
 
 ##
-# {{ domain }}
+# {{ domain_name }}
 ##
 server {
 
     root /var/www/html;
 
     index index.html index.htm index.nginx-debian.html;
-    server_name {{ domain }};
+    server_name {{ domain_name }};
 
 
     location / {
@@ -47,17 +47,17 @@ server {
 }
 
 ##
-# {{ domain }} - http redirect
+# {{ domain_name }} - http redirect
 ##
 server {
 
-    if ($host = {{ domain }}) {
+    if ($host = {{ domain_name }}) {
         return 301 https://$host$request_uri;
     }
 
     listen 80 ;
     listen [::]:80 ;
-    server_name {{ domain }};
+    server_name {{ domain_name }};
     return 404;
 
 }
