@@ -3,61 +3,61 @@
 ##
 server {
 
-	listen 80 default_server;
-	listen [::]:80 default_server;
+    listen 80 default_server;
+    listen [::]:80 default_server;
 
-	root /var/www/html;
+    root /var/www/html;
 
-	index index.html index.htm index.nginx-debian.html;
+    index index.html index.htm index.nginx-debian.html;
 
-	server_name _;
+    server_name _;
 
-	location / {
-		# First attempt to serve request as file, then
-		# as directory, then fall back to displaying a 404.
-		try_files $uri $uri/ =404;
-	}
-
-}
-
-##
-# api.lunulata.io
-##
-server {
-
-	root /var/www/html;
-
-	index index.html index.htm index.nginx-debian.html;
-  server_name api.lunulata.io;
-
-
-	location / {
-		# First attempt to serve request as file, then
-		# as directory, then fall back to displaying a 404.
-		try_files $uri $uri/ =404;
-	}
-
-	listen [::]:443 ssl ipv6only=on;
-	listen 443 ssl;
-	ssl_certificate {{ letsencrypt_fullchain }};
-	ssl_certificate_key {{ letsencrypt_privkey }};
-	include {{ nginx_options_ssl }};
-	ssl_dhparam {{ nginx_dhparams }};
+    location / {
+        # First attempt to serve request as file, then
+        # as directory, then fall back to displaying a 404.
+        try_files $uri $uri/ =404;
+    }
 
 }
 
 ##
-# api.lunulata.io - http redirect
+# {{ domain }}
 ##
 server {
 
-	if ($host = api.lunulata.io) {
-			return 301 https://$host$request_uri;
-	}
+    root /var/www/html;
 
-	listen 80 ;
-	listen [::]:80 ;
-	server_name api.lunulata.io;
-	return 404;
+    index index.html index.htm index.nginx-debian.html;
+    server_name {{ domain }};
+
+
+    location / {
+        # First attempt to serve request as file, then
+        # as directory, then fall back to displaying a 404.
+        try_files $uri $uri/ =404;
+    }
+
+    listen [::]:443 ssl ipv6only=on;
+    listen 443 ssl;
+    ssl_certificate {{ letsencrypt_fullchain }};
+    ssl_certificate_key {{ letsencrypt_privkey }};
+    include {{ nginx_options_ssl }};
+    ssl_dhparam {{ nginx_dhparams }};
+
+}
+
+##
+# {{ domain }} - http redirect
+##
+server {
+
+    if ($host = {{ domain }}) {
+        return 301 https://$host$request_uri;
+    }
+
+    listen 80 ;
+    listen [::]:80 ;
+    server_name {{ domain }};
+    return 404;
 
 }
