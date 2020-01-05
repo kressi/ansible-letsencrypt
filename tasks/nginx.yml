@@ -1,0 +1,34 @@
+---
+- name: file options-ssl-nginx.conf exists
+  copy:
+    src: files/options-ssl-nginx.conf
+    dest: "{{ nginx_options_ssl }}"
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+
+- name: Diffie-Hellman parameters exist
+  openssl_dhparam:
+    path: "{{ nginx_dhparams }}"
+    size: 1024 #default: 4096
+
+- name: my-site is available
+  template:
+    src: templates/my-site.j2
+    dest: /etc/nginx/sites-available/my-site
+    owner: root
+    group: root
+    mode: u=rw,g=r,o=r
+
+- name: my-site is enabled
+  file:
+    src: /etc/nginx/sites-available/my-site
+    dest: /etc/nginx/sites-enabled/my-site
+    state: link
+  notify: nginx is restarted
+
+- name: default site is absent
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: nginx is restarted
